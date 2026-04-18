@@ -1,0 +1,40 @@
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data
+data/
+logs/
+reports/
+.kiro/
+test/
+doc/
+
+# Environment
+.env
+.env.local
+*.log
