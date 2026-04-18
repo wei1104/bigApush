@@ -27,7 +27,11 @@ build/
 Thumbs.db
 
 # Local data
-data/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/akshare_cache/
+data/cache/
 logs/
 reports/
 .kiro/
