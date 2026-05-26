@@ -1,0 +1,48 @@
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/akshare_cache/
+data/cache/
+logs/
+reports/
+.kiro/
+# test/ 目录保留测试文件
+# doc/ 目录保留用于存放修复和文档，不忽略
+
+# Environment
+.env
+.env.local
+*.log
+
+# Configuration files (local)
+config/config.yaml
+config/tushare_config.json
