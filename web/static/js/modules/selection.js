@@ -8,6 +8,22 @@ let lastSelectionTime = null;
 let lastSelectionDate = null;
 
 /**
+ * 生成 signal-card HTML
+ */
+function _signalCardHtml(signal, strategiesStr, keyDate, reasons) {
+    if (!signal || typeof signal !== 'object') return '';
+    const s = signal.signals && Array.isArray(signal.signals) && signal.signals[0] ? signal.signals[0] : {};
+    const _reasons = s.reasons && Array.isArray(s.reasons) ? s.reasons.map(r => '<span class="tag">' + r + '</span>').join('') : '';
+    const _keyDate = s.key_date ? '<span class="tag">' + s.key_date_type + ': ' + s.key_date + '</span>' : '';
+    return '<div class="signal-card">' +
+        '<div class="signal-header">' +
+            '<span class="signal-title"><a href="javascript:void(0)" onclick="viewStockDetail(\'' + signal.code + '\')" class="stock-link">' + signal.code + ' ' + signal.name + '</a></span>' +
+            '<div class="signal-tags"><span class="tag">' + strategiesStr + '</span>' + _keyDate + _reasons + '</div>' +
+        '</div>' +
+    '</div>';
+}
+
+/**
  * 执行选股 - 先显示策略选择对话框
  */
 export async function runSelection() {
@@ -605,18 +621,8 @@ export function renderSelectionResults(results, time, filterStats, strategyDispl
                         
                         // 显示这个交集数量的所有股票
                         html += Object.values(countStocksMap).map(signal => {
-                            if (!signal || typeof signal !== 'object') {
-                                console.warn('无效的信号结构:', signal);
-                                return '';
-                            }
-                            
-                            const s = signal.signals && Array.isArray(signal.signals) && signal.signals[0] ? signal.signals[0] : {};
-                            // 使用中文名称显示策略
                             const strategiesStr = signal.strategy_display_names && Array.isArray(signal.strategy_display_names) ? signal.strategy_display_names.join(' + ') : '';
-                            const reasons = s.reasons && Array.isArray(s.reasons) ? s.reasons.map(r => '<span class="tag">' + r + '</span>').join('') : '';
-                            
-                            const keyDate = s.key_date ? '<span class="tag">' + s.key_date_type + ': ' + s.key_date + '</span>' : '';
-                            return '<div class="signal-card"><div class="signal-header"><span class="signal-title"><a href="javascript:void(0)" onclick="viewStockDetail(\'' + signal.code + '\')" class="stock-link">' + signal.code + ' ' + signal.name + '</a></span><div class="signal-tags"><span class="tag">' + strategiesStr + '</span>' + keyDate + reasons + '</div></div></div>';
+                            return _signalCardHtml(signal, strategiesStr, '', '');
                         }).join('');
                         
                         html += '</div>';
@@ -653,18 +659,8 @@ export function renderSelectionResults(results, time, filterStats, strategyDispl
                         
                         // 显示这个策略的所有股票
                         html += stocks.map(signal => {
-                            if (!signal || typeof signal !== 'object') {
-                                console.warn('无效的信号结构:', signal);
-                                return '';
-                            }
-                            
-                            const s = signal.signals && Array.isArray(signal.signals) && signal.signals[0] ? signal.signals[0] : {};
-                            // 使用中文名称显示策略
                             const strategiesStr = signal.strategy_display_names && Array.isArray(signal.strategy_display_names) ? signal.strategy_display_names.join(' + ') : '';
-                            const reasons = s.reasons && Array.isArray(s.reasons) ? s.reasons.map(r => '<span class="tag">' + r + '</span>').join('') : '';
-                            
-                            const keyDate = s.key_date ? '<span class="tag">' + s.key_date_type + ': ' + s.key_date + '</span>' : '';
-                            return '<div class="signal-card"><div class="signal-header"><span class="signal-title"><a href="javascript:void(0)" onclick="viewStockDetail(\'' + signal.code + '\')" class="stock-link">' + signal.code + ' ' + signal.name + '</a></span><div class="signal-tags"><span class="tag">' + strategiesStr + '</span>' + keyDate + reasons + '</div></div></div>';
+                            return _signalCardHtml(signal, strategiesStr, '', '');
                         }).join('');
                         
                         html += '</div>';
@@ -699,16 +695,7 @@ export function renderSelectionResults(results, time, filterStats, strategyDispl
                         html += '<div class="selection-strategy"><h4>' + strategyDisplayName + ' (' + signals.length + '只)</h4>';
                         
                         html += signals.map(signal => {
-                            if (!signal || typeof signal !== 'object') {
-                                console.warn('无效的信号结构:', signal);
-                                return '';
-                            }
-                            
-                            const s = signal.signals && Array.isArray(signal.signals) && signal.signals[0] ? signal.signals[0] : {};
-                            const reasons = s.reasons && Array.isArray(s.reasons) ? s.reasons.map(r => '<span class="tag">' + r + '</span>').join('') : '';
-                            
-                            const keyDate = s.key_date ? '<span class="tag">' + s.key_date_type + ': ' + s.key_date + '</span>' : '';
-                            return '<div class="signal-card"><div class="signal-header"><span class="signal-title"><a href="javascript:void(0)" onclick="viewStockDetail(\'' + signal.code + '\')" class="stock-link">' + signal.code + ' ' + signal.name + '</a></span><div class="signal-tags"><span class="tag">' + strategyDisplayName + '</span>' + keyDate + reasons + '</div></div></div>';
+                            return _signalCardHtml(signal, strategyDisplayName, '', '');
                         }).join('');
                         
                         html += '</div>';

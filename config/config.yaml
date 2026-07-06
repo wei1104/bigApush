@@ -14,6 +14,11 @@ dingtalk:
   webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN_HERE"
   secret: "YOUR_SECRET_HERE"
 
+# 飞书机器人配置
+# 在飞书群中添加自定义机器人，复制 webhook URL
+feishu:
+  webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/ef0d8206-3c26-4fa0-9401-138f997db920"
+
 # 定时任务配置
 schedule:
   time: "17:00"  # 每日执行时间

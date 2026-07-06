@@ -845,7 +845,7 @@ class DBManager:
     def list_all_stocks(self) -> List[str]:
         """
         列出所有已保存的股票代码（替代 CSVManager.list_all_stocks）
-        
+
         Returns:
             List[str]: 股票代码列表，已排序
         """
@@ -860,6 +860,58 @@ class DBManager:
             # 如果表不存在或查询失败，返回空列表
             logger.debug(f"列出所有股票失败: {str(e)}")
             return []
+
+    def read_stocks_batch(self, stock_codes: List[str], end_date: str = None) -> Dict[str, 'pd.DataFrame']:
+        """
+        批量读取多只股票K线数据（单次SQL查询，大幅提升速度）
+
+        Args:
+            stock_codes: 股票代码列表
+            end_date: 结束日期，None表示无限制
+
+        Returns:
+            Dict[str, pd.DataFrame]: {code: DataFrame}
+        """
+        import pandas as pd
+
+        if not stock_codes:
+            return {}
+
+        try:
+            placeholders = ','.join(['?' for _ in stock_codes])
+            sql = f"""
+                SELECT code, date, open, high, low, close, volume, market_cap, K, D, J
+                FROM stock_kline
+                WHERE code IN ({placeholders})
+            """
+            params = list(stock_codes)
+
+            if end_date:
+                end_date_formatted = end_date if '-' in end_date else f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
+                sql += " AND date <= ?"
+                params.append(end_date_formatted)
+
+            sql += " ORDER BY code, date DESC"
+
+            results = self.query(sql, tuple(params))
+
+            if not results:
+                return {}
+
+            df_all = pd.DataFrame(results)
+            df_all['date'] = pd.to_datetime(df_all['date'])
+
+            # 按code分组
+            stock_data = {}
+            for code, group in df_all.groupby('code'):
+                stock_data[code] = group.reset_index(drop=True)
+
+            logger.info(f"批量读取 {len(stock_data)} 只股票完成")
+            return stock_data
+
+        except Exception as e:
+            logger.error(f"批量读取股票失败: {str(e)}")
+            return {}
     
     def stock_exists(self, stock_code: str) -> bool:
         """

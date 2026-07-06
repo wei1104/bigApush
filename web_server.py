@@ -883,44 +883,36 @@ def run_selection():
             # 从数据库获取所有股票代码
             stock_codes = db_manager.list_all_stocks()
 
+            # 过滤：只保留主板（沪市600/601/603/605，深市000/001/002/003）
+            stock_codes = [c for c in stock_codes if c[:3] in ('600','601','603','605','000','001','002','003')]
+
             # 从数据库获取所有股票名称（不再使用 stock_names.json）
             stock_names = db_manager.get_all_stock_names()
-            func_logger.info(f"加载了 {len(stock_codes)} 只股票数据")
+            func_logger.info(f"加载了 {len(stock_codes)} 只股票数据（仅主板）")
         except Exception as e:
             func_logger.error(f"加载股票数据失败: {str(e)}")
             return jsonify({'success': False, 'error': f'加载股票数据失败: {str(e)}'})
         
-        # 构建股票数据字典
+        # 构建股票数据字典（批量读取优化）
         try:
             func_logger.warning(f"⚠️ 开始加载股票数据, end_date={end_date}")
+            load_start_time = dt.now()
+
+            # 使用批量读取（单次SQL查询，比逐只读取快10-50倍）
+            batch_df_dict = db_manager.read_stocks_batch(stock_codes, end_date=end_date)
+
             stock_data = {}
             skip_count = 0
-            load_start_time = dt.now()
-            
-            # 加载所有股票的完整数据
-            for idx, code in enumerate(stock_codes):
-                try:
-                    # 读取完整数据，如果指定了结束日期，则只读取到该日期的数据
-                    full_df = db_manager.read_stock(code, end_date=end_date)
-                    if not full_df.empty and len(full_df) >= 30:
-                        # 按日期降序排序（最新的在前）
-                        full_df = full_df.sort_values('date', ascending=False)
-                        # 从 stock_names 字典中获取股票名称
-                        stock_name = stock_names.get(code, '未知')
-                        stock_data[code] = (stock_name, full_df)
-                except Exception as e:
-                    # 跳过无法读取的股票
+            for code in stock_codes:
+                df = batch_df_dict.get(code)
+                if df is not None and not df.empty and len(df) >= 30:
+                    stock_name = stock_names.get(code, '未知')
+                    stock_data[code] = (stock_name, df)
+                else:
                     skip_count += 1
-                    if skip_count <= 5:  # 只记录前5个错误
-                        func_logger.debug(f"无法读取股票 {code}: {str(e)}")
-                
-                # 每加载500只股票输出一次进度
-                if (idx + 1) % 500 == 0:
-                    elapsed = (dt.now() - load_start_time).total_seconds()
-                    func_logger.info(f"  加载进度: [{idx + 1}/{len(stock_codes)}] 已加载 {len(stock_data)} 只，耗时 {elapsed:.1f}秒")
-            
+
             load_time = (dt.now() - load_start_time).total_seconds()
-            func_logger.info(f"成功加载 {len(stock_data)} 只股票的K线数据，跳过 {skip_count} 只，总耗时 {load_time:.1f}秒")
+            func_logger.info(f"批量加载 {len(stock_data)} 只股票完成，跳过 {skip_count} 只，耗时 {load_time:.1f}秒")
         except Exception as e:
             func_logger.error(f"构建股票数据字典失败: {str(e)}")
             return jsonify({'success': False, 'error': f'构建股票数据字典失败: {str(e)}'})
@@ -1045,41 +1037,38 @@ def run_selection():
                     all_strategy_names = list(registry.strategies.keys())
                     strategies_to_execute = [(name, registry.get_strategy(name)) for name in all_strategy_names if registry.get_strategy(name)]
                 
-                for strategy_name, strategy in strategies_to_execute:
-                    func_logger.info(f"执行策略: {strategy_name}")
-                    signals = []
-                    error_count = 0
-                    strategy_start_time = dt.now()
-                    
-                    # 获取该策略的中文名称
-                    strategy_display_name = strategy_display_names.get(strategy_name, strategy_name)
-                    
-                    for idx, (code, (name, df)) in enumerate(stock_data.items()):
+                # 并行执行策略（使用线程池加速）
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                import os
+                _max_workers = min(os.cpu_count() or 4, len(strategies_to_execute), 8)
+
+                def _run_strategy(item):
+                    sname, sobj = item
+                    s_display = strategy_display_names.get(sname, sname)
+                    sigs = []
+                    errs = 0
+                    t0 = dt.now()
+                    for code, (name, df) in stock_data.items():
                         try:
-                            result = strategy.analyze_stock(code, name, df)
-                            if result:
-                                # 从 stock_names 字典中获取股票名称
-                                fallback_name = stock_names.get(code, '未知')
-                                signals.append({
-                                    'code': result['code'],
-                                    'name': result.get('name', fallback_name),
-                                    'signals': result['signals'],
-                                    'strategy_display_name': strategy_display_name  # 添加中文名称
+                            r = sobj.analyze_stock(code, name, df)
+                            if r:
+                                sigs.append({
+                                    'code': r['code'],
+                                    'name': r.get('name', stock_names.get(code, '未知')),
+                                    'signals': r['signals'],
+                                    'strategy_display_name': s_display
                                 })
-                        except Exception as e:
-                            # 跳过分析失败的股票
-                            error_count += 1
-                            if error_count <= 3:  # 只记录前3个错误
-                                func_logger.debug(f"策略 {strategy_name} 分析股票 {code} 失败: {str(e)}")
-                        
-                        # 每处理100只股票输出一次进度
-                        if (idx + 1) % 100 == 0:
-                            elapsed = (dt.now() - strategy_start_time).total_seconds()
-                            func_logger.info(f"    {strategy_display_name} 进度: [{idx + 1}/{len(stock_data)}] 已选中 {len(signals)} 只，耗时 {elapsed:.1f}秒")
-                    
-                    strategy_time = (dt.now() - strategy_start_time).total_seconds()
-                    results[strategy_name] = signals
-                    func_logger.info(f"策略 {strategy_name} 完成 - 选中 {len(signals)} 只股票，分析失败 {error_count} 只，总耗时 {strategy_time:.1f}秒")
+                        except Exception:
+                            errs += 1
+                    func_logger.info(f"策略 {sname} 完成 - 选中 {len(sigs)} 只，耗时 {(dt.now()-t0).total_seconds():.1f}秒")
+                    return sname, sigs, errs
+
+                func_logger.info(f"并行执行 {len(strategies_to_execute)} 个策略 (workers={_max_workers})")
+                with ThreadPoolExecutor(max_workers=_max_workers) as pool:
+                    futures = {pool.submit(_run_strategy, item): item for item in strategies_to_execute}
+                    for future in as_completed(futures):
+                        sname, sigs, errs = future.result()
+                        results[sname] = sigs
                 
                 # 计算交集分析（仅当有多个策略且都有结果时）
                 if len(results) > 1:
@@ -1289,6 +1278,177 @@ def run_selection():
                 # 匹配失败时返回原始结果
                 pass
         
+        # 飞书推送选股结果
+        try:
+            from utils.feishu_notifier import FeishuNotifier
+            import yaml as _yaml
+            with open('config/config.yaml', 'r', encoding='utf-8') as _f:
+                _cfg = _yaml.safe_load(_f)
+            _feishu_cfg = _cfg.get('feishu', {})
+            _webhook_url = os.environ.get('FEISHU_WEBHOOK') or _feishu_cfg.get('webhook_url', '')
+            _notifier = FeishuNotifier(_webhook_url)
+            _lines = [f"📊 缅A每日推送 ({dt.now().strftime('%Y-%m-%d %H:%M:%S')})", ""]
+            _total = 0
+            _all_stocks = []
+
+            for _sname, _signals in cleaned_results.items():
+                if isinstance(_signals, list) and _signals:
+                    _lines.append(f"【{_sname}】: {len(_signals)} 只")
+                    for _s in _signals:
+                        _name = _s.get('name', '')
+                        _code = _s.get('code', '')
+                        _sig = _s.get('signals', [])
+                        if _sig:
+                            _lines.append(f"  {_code} {_name} 价格:{_sig[0].get('close','-')} J:{_sig[0].get('J','-')}")
+                        else:
+                            _lines.append(f"  {_code} {_name}")
+                        _all_stocks.append({'code': _code, 'name': _name})
+                    _lines.append("")
+                    _total += len(_signals)
+
+            # 与上一日对比：新增/去除
+            if _total > 0:
+                try:
+                    from utils.selection_record_manager import SelectionRecordManager
+                    _srm = SelectionRecordManager()
+                    _today_codes = {s['code'] for s in _all_stocks}
+                    _today_date = dt.now().strftime('%Y-%m-%d')
+
+                    _prev_result = _srm.get_selection_history(
+                        filters={'end_date': _today_date}, page=1, limit=5000
+                    )
+                    _prev_stocks = {}
+                    for _r in (_prev_result.get('data') or []):
+                        _d = _r.get('selection_date', '')
+                        if _d and _d < _today_date:
+                            if _d not in _prev_stocks:
+                                _prev_stocks[_d] = set()
+                            _prev_stocks[_d].add(_r.get('stock_code', ''))
+
+                    if _prev_stocks:
+                        _prev_date = max(_prev_stocks.keys())
+                        _prev_codes = _prev_stocks[_prev_date]
+                        _new_codes = _today_codes - _prev_codes
+                        _removed_codes = _prev_codes - _today_codes
+
+                        if _new_codes or _removed_codes:
+                            _lines.append("━━━━━━━━━━━━━━━━━━━━")
+                            _lines.append(f"📋 与 {_prev_date} 对比")
+                            _lines.append("")
+                            if _new_codes:
+                                _new_names = [f"{s['code']} {s['name']}" for s in _all_stocks if s['code'] in _new_codes]
+                                _lines.append(f"  🟢 新增 ({len(_new_codes)}只):")
+                                for _n in _new_names:
+                                    _lines.append(f"    + {_n}")
+                            if _removed_codes:
+                                _lines.append(f"  🔴 去除 ({len(_removed_codes)}只):")
+                                for _rc in _removed_codes:
+                                    _lines.append(f"    - {_rc}")
+                            _lines.append("")
+                except Exception as _diff_err:
+                    func_logger.warning(f"对比历史选股失败: {_diff_err}")
+
+            if _total > 0:
+                _lines.insert(1, f"共 {_total} 只股票入选")
+
+            # ─── 每日大盘复盘 + 新闻 ───
+            try:
+                import requests as _req
+
+                # 1) 主要指数行情
+                _index_codes = [
+                    ('sh000001', '上证指数'),
+                    ('sz399001', '深证成指'),
+                    ('sz399006', '创业板指'),
+                    ('sh000688', '科创50'),
+                ]
+                _idx_lines = []
+                for _code, _name in _index_codes:
+                    try:
+                        _url = f"https://qt.gtimg.cn/q={_code}"
+                        _resp = _req.get(_url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+                        _data = _resp.text.split('~')
+                        if len(_data) > 45:
+                            _price = _data[3]
+                            _pct = _data[32]
+                            _vol = _data[37]  # 成交额(万)
+                            try:
+                                _vol_yi = float(_vol) / 10000
+                                _vol_str = f"{_vol_yi:.0f}亿"
+                            except Exception:
+                                _vol_str = ''
+                            _emoji = '🔴' if float(_pct) > 0 else '🟢' if float(_pct) < 0 else '⚪'
+                            _idx_lines.append(f"  {_emoji} {_name}: {_price} ({_pct}%) {_vol_str}")
+                    except Exception:
+                        pass
+                if _idx_lines:
+                    _lines.append("━━━━━━━━━━━━━━━━━━━━")
+                    _lines.append(f"📈 今日大盘复盘 ({dt.now().strftime('%Y-%m-%d %H:%M:%S')})")
+                    _lines.append("")
+                    _lines.extend(_idx_lines)
+                    _lines.append("")
+
+                # 2) 板块涨跌热力图
+                try:
+                    _sec_resp = _req.get(
+                        'https://vip.stock.finance.sina.com.cn/q/view/newSinaHy.php',
+                        timeout=8, headers={'User-Agent': 'Mozilla/5.0'}
+                    )
+                    import re as _re, json as _json
+                    _sec_match = _re.search(r'=\s*(\{.*\})', _sec_resp.text, _re.DOTALL)
+                    if _sec_match:
+                        _sec_data = _json.loads(_sec_match.group(1))
+                        _sectors = []
+                        for _v in _sec_data.values():
+                            _parts = _v.split(',')
+                            if len(_parts) > 5:
+                                _sectors.append((_parts[1], float(_parts[4]) if _parts[4] else 0))
+                        _sectors.sort(key=lambda x: x[1], reverse=True)
+
+                        _up_sectors = [f"{n}({p:+.2f}%)" for n, p in _sectors[:5]]
+                        _dn_sectors = [f"{n}({p:+.2f}%)" for n, p in _sectors[-5:]]
+
+                        _lines.append("🔥 板块热力图")
+                        _lines.append(f"  🔴 领涨: {' | '.join(_up_sectors)}")
+                        _lines.append(f"  🟢 领跌: {' | '.join(_dn_sectors)}")
+                        _lines.append("")
+                except Exception:
+                    pass
+
+                # 3) 财经要闻（新浪财经）
+                try:
+                    _news_resp = _req.get(
+                        'https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2516&k=&num=12&page=1',
+                        timeout=8,
+                        headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://finance.sina.com.cn'}
+                    )
+                    _news_list = _news_resp.json().get('result', {}).get('data', [])
+                    if _news_list:
+                        _lines.append("━━━━━━━━━━━━━━━━━━━━")
+                        _lines.append("📰 今日财经要闻")
+                        _lines.append("")
+                        for _n in _news_list[:8]:
+                            _title = _n.get('title', '')[:50]
+                            _intro = _n.get('intro', '')[:60]
+                            if _title:
+                                _lines.append(f"  • {_title}")
+                                if _intro:
+                                    _lines.append(f"    {_intro}")
+                        _lines.append("")
+                except Exception:
+                    pass
+
+            except Exception as _idx_err:
+                func_logger.warning(f"获取大盘数据失败: {_idx_err}")
+
+            if _total > 0:
+                _notifier.send_text("\n".join(_lines))
+                func_logger.info(f"飞书推送完成，共 {_total} 只股票入选")
+            else:
+                func_logger.info("选股结果为空，跳过飞书推送")
+        except Exception as _fe:
+            func_logger.warning(f"飞书推送失败: {_fe}")
+
         return jsonify({
             'success': True,
             'data': cleaned_results,
