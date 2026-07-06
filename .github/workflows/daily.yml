@@ -2,52 +2,62 @@ name: 缅A每日推送
 
 on:
   schedule:
-    # 周一到周五 17:00 UTC = 北京时间 01:00（收盘后运行）
+    # 交易日收盘后：周一到周五 17:00 UTC = 北京时间 01:00（次日凌晨）
     - cron: '0 17 * * 1-5'
-  workflow_dispatch:  # 支持手动触发
+    # 每天早上8点：0 0 * * * UTC = 北京时间 08:00
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
-  run-selection:
+  # 任务1：收盘后选股+复盘（周一到周五）
+  evening-selection:
+    if: github.event_name == 'schedule' && (github.event.schedule == '0 17 * * 1-5') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
+      - run: pip install -r requirements.txt
       - name: Restore database cache
         uses: actions/cache@v4
         with:
           path: data
           key: stock-db-${{ github.run_id }}
-          restore-keys: |
-            stock-db-
-
+          restore-keys: stock-db-
       - name: Check database
         id: check-db
         run: |
           if [ -f "data/stock_selection.db" ]; then
-            echo "db_exists=true" >> $GITHUB_OUTPUT
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "db_exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Initialize data (first run only)
-        if: steps.check-db.outputs.db_exists == 'false'
+      - name: Initialize data (first run)
+        if: steps.check-db.outputs.exists == 'false'
         run: python main.py init
         timeout-minutes: 20
-
-      - name: Run selection and push to Feishu
+      - name: Run selection and push
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
         run: python main.py run
         timeout-minutes: 10
+
+  # 任务2：每天早上8点推送新闻
+  morning-news:
+    if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install requests
+      - name: Push morning news
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        run: python daily_news.py
