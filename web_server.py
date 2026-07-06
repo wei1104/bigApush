@@ -1299,7 +1299,7 @@ def run_selection():
                         _code = _s.get('code', '')
                         _sig = _s.get('signals', [])
                         if _sig:
-                            _lines.append(f"  {_code} {_name} 价格:{_sig[0].get('close','-')} J:{_sig[0].get('J','-')}")
+                            _lines.append(f"  {_code} {_name} 价格:{_sig[0].get('close','-')}")
                         else:
                             _lines.append(f"  {_code} {_name}")
                         _all_stocks.append({'code': _code, 'name': _name})
@@ -1429,7 +1429,7 @@ def run_selection():
                         _lines.append("")
                         for _n in _news_list[:8]:
                             _title = _n.get('title', '')[:50]
-                            _intro = _n.get('intro', '')[:60]
+                            _intro = _n.get('intro', '')[:100]
                             if _title:
                                 _lines.append(f"  • {_title}")
                                 if _intro:

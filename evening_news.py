@@ -77,7 +77,7 @@ def get_news(count=10):
         news_list = resp.json().get("result", {}).get("data", [])
         for n in news_list[:count]:
             title = n.get("title", "")[:55]
-            intro = n.get("intro", "")[:65]
+            intro = n.get("intro", "")[:100]
             if title:
                 lines.append(f"  • {title}")
                 if intro:

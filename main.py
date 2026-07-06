@@ -755,7 +755,7 @@ B1完美图形匹配:
                                 code = s.get('code', '')
                                 sig = s.get('signals', [])
                                 if sig:
-                                    lines.append(f"  {code} {name} 价格:{sig[0].get('close','-')} J:{sig[0].get('J','-')}")
+                                    lines.append(f"  {code} {name} 价格:{sig[0].get('close','-')}")
                                 else:
                                     lines.append(f"  {code} {name}")
                                 all_stocks.append({'code': code, 'name': name})
@@ -881,7 +881,7 @@ B1完美图形匹配:
                             lines.append("")
                             for _n in _news_list[:8]:
                                 _title = _n.get('title', '')[:50]
-                                _intro = _n.get('intro', '')[:60]
+                                _intro = _n.get('intro', '')[:100]
                                 if _title:
                                     lines.append(f"  • {_title}")
                                     if _intro:
