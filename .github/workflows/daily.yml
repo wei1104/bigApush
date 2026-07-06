@@ -2,16 +2,18 @@ name: 缅A每日推送
 
 on:
   schedule:
-    # 交易日收盘后：周一到周五 17:00 UTC = 北京时间 01:00（次日凌晨）
+    # 交易日收盘后选股复盘：周一到周五 17:00 UTC = 北京时间 01:00（次日凌晨）
     - cron: '0 17 * * 1-5'
-    # 每天早上8点：0 0 * * * UTC = 北京时间 08:00
+    # 每天早上8点新闻：0 0 * * * UTC = 北京时间 08:00
     - cron: '0 0 * * *'
+    # 每天晚上10:30新闻：30 14 * * * UTC = 北京时间 22:30
+    - cron: '30 14 * * *'
   workflow_dispatch:
 
 jobs:
   # 任务1：收盘后选股+复盘（周一到周五）
   evening-selection:
-    if: github.event_name == 'schedule' && (github.event.schedule == '0 17 * * 1-5') || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '0 17 * * 1-5' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -45,9 +47,9 @@ jobs:
         run: python main.py run
         timeout-minutes: 10
 
-  # 任务2：每天早上8点推送新闻
+  # 任务2：每天早上8点早间新闻
   morning-news:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
+    if: github.event.schedule == '0 0 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -61,3 +63,20 @@ jobs:
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
         run: python daily_news.py
+
+  # 任务3：每天晚上10:30晚间新闻
+  evening-news:
+    if: github.event.schedule == '30 14 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install requests
+      - name: Push evening news
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        run: python evening_news.py
