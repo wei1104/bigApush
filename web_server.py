@@ -1351,6 +1351,22 @@ def run_selection():
             if _total > 0:
                 _lines.insert(1, f"共 {_total} 只股票入选")
 
+            # ─── 买入建议分析 ───
+            if _all_stocks:
+                try:
+                    from simple_analyzer import analyze_stock, format_analysis_message
+                    _analyses = []
+                    for _stock in _all_stocks[:10]:  # 最多分析10只
+                        _a = analyze_stock(_stock['code'], _stock['name'])
+                        if _a['score'] > 0:
+                            _analyses.append(_a)
+                    if _analyses:
+                        _analysis_msg = format_analysis_message(_analyses)
+                        if _analysis_msg:
+                            _lines.append(_analysis_msg)
+                except Exception as _a_err:
+                    func_logger.warning(f"买入建议分析失败: {_a_err}")
+
             # ─── 每日大盘复盘 + 新闻 ───
             try:
                 import requests as _req

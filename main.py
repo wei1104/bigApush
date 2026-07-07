@@ -813,6 +813,22 @@ B1完美图形匹配:
                     except Exception as _diff_err:
                         print(f"  ⚠️ 对比历史选股失败: {_diff_err}")
 
+                # ─── 买入建议分析 ───
+                if all_stocks:
+                    try:
+                        from simple_analyzer import analyze_stock, format_analysis_message
+                        _analyses = []
+                        for _stock in all_stocks[:10]:  # 最多分析10只
+                            _a = analyze_stock(_stock['code'], _stock['name'])
+                            if _a['score'] > 0:
+                                _analyses.append(_a)
+                        if _analyses:
+                            _analysis_msg = format_analysis_message(_analyses)
+                            if _analysis_msg:
+                                lines.append(_analysis_msg)
+                    except Exception as _a_err:
+                        print(f"  ⚠️ 买入建议分析失败: {_a_err}")
+
                 # ─── 每日大盘复盘 + 新闻 ───
                 try:
                     import requests as _req
