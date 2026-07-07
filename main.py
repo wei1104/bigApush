@@ -705,6 +705,14 @@ B1完美图形匹配:
         quant.init_data(max_stocks=args.max_stocks)
     
     elif args.command == 'run':
+            # 检查今天是否为交易日
+            from utils.trade_date_utils import is_trading_day
+            from datetime import datetime
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            if not is_trading_day(today_str):
+                print(f"今天 {today_str} 不是交易日，跳过选股")
+                sys.exit(0)
+            
             # 原有选股流程（支持B1完美图形匹配）
             if args.b1_match:
                 # 启用B1完美图形匹配
