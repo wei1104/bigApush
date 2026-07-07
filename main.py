@@ -818,7 +818,7 @@ B1完美图形匹配:
                     try:
                         from simple_analyzer import analyze_stock, format_analysis_message
                         _analyses = []
-                        for _stock in all_stocks[:10]:  # 最多分析10只
+                        for _stock in all_stocks:
                             _a = analyze_stock(_stock['code'], _stock['name'])
                             if _a['score'] > 0:
                                 _analyses.append(_a)
