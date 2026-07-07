@@ -55,28 +55,34 @@ def get_sector_fund_flow():
     """获取板块资金流向（新浪）"""
     try:
         url = "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/MoneyFlow.ssl_bkzj_bk"
-        params = {
-            "page": 1,
-            "num": 20,
-            "sort": "netamount",
-            "asc": 0,
-            "fenlei": 1
-        }
-        resp = requests.get(url, params=params, timeout=8, headers={
-            "User-Agent": "Mozilla/5.0",
-            "Referer": "https://finance.sina.com.cn"
-        })
-        data = resp.json()
-        if data and isinstance(data, list):
-            result = []
-            for item in data:
-                name = item.get("name", "")
-                net = float(item.get("netamount", 0)) / 100000000  # 转换为亿
-                result.append({"name": name, "fund": net})
-            return result
+        headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn"}
+        
+        # 获取流入最多（降序）
+        resp1 = requests.get(url, params={"page": 1, "num": 5, "sort": "netamount", "asc": 0, "fenlei": 1}, timeout=8, headers=headers)
+        inflow_data = resp1.json() if resp1.status_code == 200 else []
+        
+        # 获取流出最多（升序）
+        resp2 = requests.get(url, params={"page": 1, "num": 5, "sort": "netamount", "asc": 1, "fenlei": 1}, timeout=8, headers=headers)
+        outflow_data = resp2.json() if resp2.status_code == 200 else []
+        
+        inflow = []
+        for item in inflow_data:
+            name = item.get("name", "")
+            net = float(item.get("netamount", 0)) / 100000000
+            if net > 0:
+                inflow.append({"name": name, "fund": net})
+        
+        outflow = []
+        for item in outflow_data:
+            name = item.get("name", "")
+            net = float(item.get("netamount", 0)) / 100000000
+            if net < 0:
+                outflow.append({"name": name, "fund": net})
+        
+        return inflow, outflow
     except Exception:
         pass
-    return []
+    return [], []
 
 
 def format_sector_message():
@@ -105,18 +111,14 @@ def format_sector_message():
 
     # 资金流向
     lines.append("💰 板块资金流向")
-    fund_flow = get_sector_fund_flow()
-    if fund_flow:
-        sorted_flow = sorted(fund_flow, key=lambda x: x['fund'], reverse=True)
-        inflow = [f"{s['name']}({s['fund']:+.2f}亿)" for s in sorted_flow if s['fund'] > 0][:5]
-        outflow = [f"{s['name']}({s['fund']:+.2f}亿)" for s in sorted_flow if s['fund'] < 0][:5]
-        if inflow:
-            lines.append(f"  净流入: {' | '.join(inflow)}")
-        if outflow:
-            lines.append(f"  净流出: {' | '.join(outflow)}")
-        if not inflow and not outflow:
-            lines.append("  无数据")
-    else:
+    inflow, outflow = get_sector_fund_flow()
+    if inflow:
+        inflow_str = [f"{s['name']}({s['fund']:+.2f}亿)" for s in inflow]
+        lines.append(f"  净流入: {' | '.join(inflow_str)}")
+    if outflow:
+        outflow_str = [f"{s['name']}({s['fund']:+.2f}亿)" for s in outflow]
+        lines.append(f"  净流出: {' | '.join(outflow_str)}")
+    if not inflow and not outflow:
         lines.append("  数据暂不可用")
     lines.append("")
 
