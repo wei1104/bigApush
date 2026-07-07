@@ -6,6 +6,9 @@ on:
     - cron: '0 17 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   keep-alive:
     runs-on: ubuntu-latest
