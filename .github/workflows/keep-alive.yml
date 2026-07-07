@@ -1,0 +1,22 @@
+name: Keep Alive
+
+on:
+  schedule:
+    # 每天北京时间凌晨1点运行一次，保持仓库活跃
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Touch file to keep repo active
+        run: echo "Keep alive at $(date)" >> .github/keep-alive.log
+      - name: Commit if changed
+        run: |
+          git config user.name "wei1104"
+          git config user.email "2728562635@qq.com"
+          git add .github/keep-alive.log
+          git diff --staged --quiet || git commit -m "chore: keep alive"
+          git push
